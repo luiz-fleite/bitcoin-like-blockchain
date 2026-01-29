@@ -1,0 +1,10 @@
+[project]
+name = "blockchain-lsd"
+version = "0.1.0"
+description = "Implementação de uma Criptomoeda Distribuída Simplificada (Bitcoin-like) - LSD UFPA"
+readme = "README.md"
+requires-python = ">=3.12"  # Compatível com 3.12+ (lab pode ter versões diferentes)
+dependencies = []
+
+[project.scripts]
+blockchain-node = "src.blockchain_lsd:main"
