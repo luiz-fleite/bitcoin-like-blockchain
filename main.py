@@ -15,6 +15,7 @@ import logging
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
 from rich.progress import Progress, SpinnerColumn, TextColumn
 import questionary
 
@@ -253,10 +254,18 @@ def main():
         ]
     )
     
+    banner = Text(
+        "  ____  _ _            _          ____ _           _       \n"
+        " | __ )(_) |_ ___ ___ (_)_ __    / ___| |__   __ _(_)_ __  \n"
+        " |  _ \\| | __/ __/ _ \\| | '_ \\  | |   | '_ \\ / _` | | '_ \\ \n"
+        " | |_) | | || (_| (_) | | | | | | |___| | | | (_| | | | | |\n"
+        " |____/|_|\\__\\___\\___/|_|_| |_|  \\____|_| |_|\\__,_|_|_| |_|\n"
+    )
+    banner.stylize("bold yellow")
+    console.print(banner)
     console.print(Panel.fit(
-        "[bold cyan]Bitcoin Blockchain Node[/bold cyan]\n"
-        f"Host: {args.host} | Porta: {args.port}\n"
-        f"Logs: [dim]{log_file}[/dim]",
+        f"[bold cyan]Node[/bold cyan] {args.host}:{args.port}\n"
+        f"[dim]Logs → {log_file}[/dim]",
         border_style="cyan"
     ))
     
