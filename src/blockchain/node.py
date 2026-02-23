@@ -155,27 +155,33 @@ class Node:
                 if self.blockchain.replace_chain(new_chain):
                     self.logger.info(f"Blockchain atualizada: {len(new_chain)} blocos")
             
-            case MessageType.PING:
-                # Registra o peer que enviou o ping
-                if message.sender and message.sender != self.address:
-                    self.peers.add(message.sender)
-                    self.logger.info(f"Peer registrado via PING: {message.sender}")
-                return Protocol.pong()
-            
-            case MessageType.DISCOVER_PEERS:
-                return Protocol.peers_list(list(self.peers))
-            
-            case MessageType.PEERS_LIST:
-                new_peers = set(message.payload["peers"]) - {self.address}
-                discovered_peers = new_peers - self.peers
-                if discovered_peers:
-                    self.peers.update(discovered_peers)
-                    self.logger.info(f"Peers descobertos via broadcast: {len(discovered_peers)}")
-                    for new_peer in discovered_peers:
-                        try:
-                            self._send_message(new_peer, Protocol.ping())
-                        except Exception:
-                            pass
+            case _:
+                # Tenta processar mensagens não obrigatórias (PING, DISCOVER_PEERS, etc)
+                # Se a outra equipe não suportar, eles simplesmente vão ignorar ou dar erro,
+                # mas não quebra o fluxo principal.
+                try:
+                    if message.type == MessageType.PING:
+                        if message.sender and message.sender != self.address:
+                            self.peers.add(message.sender)
+                            self.logger.info(f"Peer registrado via PING: {message.sender}")
+                        return Protocol.pong()
+                    
+                    elif message.type == MessageType.DISCOVER_PEERS:
+                        return Protocol.peers_list(list(self.peers))
+                    
+                    elif message.type == MessageType.PEERS_LIST:
+                        new_peers = set(message.payload["peers"]) - {self.address}
+                        discovered_peers = new_peers - self.peers
+                        if discovered_peers:
+                            self.peers.update(discovered_peers)
+                            self.logger.info(f"Peers descobertos via broadcast: {len(discovered_peers)}")
+                            for new_peer in discovered_peers:
+                                try:
+                                    self._send_message(new_peer, Protocol.ping())
+                                except Exception:
+                                    pass
+                except Exception as e:
+                    self.logger.debug(f"Mensagem não padrão ignorada ou falhou: {e}")
         
         return None
     
@@ -220,6 +226,9 @@ class Node:
                                         self.logger.debug(f"Não foi possível notificar o novo peer {new_peer}: {e}")
                     except Exception as e:
                         self.logger.warning(f"Falha ao descobrir peers de {peer_address}: {e}")
+                        
+                    # Faz broadcast da própria existência para todos os peers conhecidos
+                    self._broadcast(Protocol.ping())
                         
                     return True
         
