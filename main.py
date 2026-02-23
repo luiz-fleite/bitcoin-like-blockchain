@@ -49,10 +49,29 @@ def parse_args():
 
 def create_transaction(node: Node):
     console.print(Panel("[bold blue]Nova Transação[/bold blue]", expand=False))
-    origem = questionary.text("Origem:").ask()
-    if not origem: return
-    destino = questionary.text("Destino:").ask()
-    if not destino: return
+    
+    origem = node.address
+    console.print(f"Origem: [bold cyan]{origem}[/bold cyan]")
+    
+    choices = [
+        questionary.Choice("Digitar endereço manualmente", "manual")
+    ]
+    for peer in node.peers:
+        choices.append(questionary.Choice(f"Peer: {peer}", peer))
+        
+    destino_choice = questionary.select(
+        "Escolha o destino:",
+        choices=choices
+    ).ask()
+    
+    if not destino_choice: return
+    
+    if destino_choice == "manual":
+        destino = questionary.text("Destino:").ask()
+        if not destino: return
+    else:
+        destino = destino_choice
+        
     valor_str = questionary.text("Valor:").ask()
     if not valor_str: return
     
@@ -142,8 +161,26 @@ def show_blockchain(node: Node):
 
 
 def show_balance(node: Node):
-    address = questionary.text("Endereço:").ask()
-    if not address: return
+    choices = [
+        questionary.Choice(f"Meu nó ({node.address})", node.address),
+        questionary.Choice("Digitar endereço manualmente", "manual")
+    ]
+    for peer in node.peers:
+        choices.append(questionary.Choice(f"Peer: {peer}", peer))
+        
+    address_choice = questionary.select(
+        "Escolha o endereço para ver o saldo:",
+        choices=choices
+    ).ask()
+    
+    if not address_choice: return
+    
+    if address_choice == "manual":
+        address = questionary.text("Endereço:").ask()
+        if not address: return
+    else:
+        address = address_choice
+        
     balance = node.blockchain.get_balance(address)
     console.print(Panel(f"Saldo de [bold cyan]{address}[/bold cyan]: [bold green]{balance}[/bold green]", expand=False))
 
