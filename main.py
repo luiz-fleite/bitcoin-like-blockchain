@@ -225,14 +225,19 @@ def sync_chain(node: Node):
     ) as progress:
         progress.add_task(description="Sincronizando blockchain e mempool...", total=None)
         node.sync_blockchain()
-        added = node.sync_mempool()
-        
+        result = node.sync_mempool()
+    
+    added = result["added"]
+    unreachable = result["unreachable"]
+    
     console.print(
         f"[bold green]✓ Blockchain sincronizada com {len(node.blockchain.chain)} blocos[/bold green]\n"
-        f"[bold green]✓ Mempool sincronizada: {len(node.blockchain.pending_transactions)} transação(ões) pendente(s)"
+        f"[bold green]✓ Mempool: {len(node.blockchain.pending_transactions)} transação(ões) pendente(s)"
         + (f" ([cyan]+{added} nova(s)[/cyan])" if added else "") +
         "[/bold green]"
     )
+    for peer in unreachable:
+        console.print(f"[bold yellow]⚠ Não foi possível conectar ao peer {peer} — verifique firewall/rede[/bold yellow]")
 
 
 def main():

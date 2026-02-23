@@ -224,20 +224,26 @@ class Node:
             except Exception as e:
                 self.logger.error(f"Erro ao sincronizar com {peer}: {e}")
 
-    def sync_mempool(self):
+    def sync_mempool(self) -> dict:
         """Sincroniza transações pendentes com os peers."""
         added = 0
+        unreachable = []
         for peer in list(self.peers):
             try:
                 response = self._send_message(peer, Protocol.request_mempool())
                 if response and response.type == MessageType.RESPONSE_MEMPOOL:
                     for tx_data in response.payload["transactions"]:
                         tx = Transaction.from_dict(tx_data)
-                        if self.blockchain.add_transaction(tx):
+                        # trusted=True: confia que o peer já validou o saldo
+                        if self.blockchain.add_transaction(tx, trusted=True):
                             added += 1
+                else:
+                    unreachable.append(peer)
             except Exception as e:
                 self.logger.error(f"Erro ao sincronizar mempool com {peer}: {e}")
+                unreachable.append(peer)
         self.logger.info(f"Mempool sincronizada: {added} nova(s) transação(ões) adicionada(s)")
+        return {"added": added, "unreachable": unreachable}
         return added
     
     def broadcast_transaction(self, transaction: Transaction):
