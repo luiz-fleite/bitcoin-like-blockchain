@@ -46,10 +46,9 @@ class Blockchain:
                 if tx.origem == address:
                     balance -= tx.valor
         
-        # Considera também transações pendentes
+        # Considera também transações pendentes apenas para subtrair o saldo
+        # (o dinheiro já saiu da conta, mas ainda não chegou no destino)
         for tx in self.pending_transactions:
-            if tx.destino == address:
-                balance += tx.valor
             if tx.origem == address:
                 balance -= tx.valor
         
