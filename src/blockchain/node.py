@@ -166,8 +166,16 @@ class Node:
                 return Protocol.peers_list(list(self.peers))
             
             case MessageType.PEERS_LIST:
-                new_peers = set(message.payload["peers"])
-                self.peers.update(new_peers - {self.address})
+                new_peers = set(message.payload["peers"]) - {self.address}
+                discovered_peers = new_peers - self.peers
+                if discovered_peers:
+                    self.peers.update(discovered_peers)
+                    self.logger.info(f"Peers descobertos via broadcast: {len(discovered_peers)}")
+                    for new_peer in discovered_peers:
+                        try:
+                            self._send_message(new_peer, Protocol.ping())
+                        except Exception:
+                            pass
         
         return None
     
@@ -197,9 +205,19 @@ class Node:
                         peers_msg = Protocol.discover_peers()
                         response = self._send_message(peer_address, peers_msg)
                         if response and response.type == MessageType.PEERS_LIST:
-                            new_peers = set(response.payload["peers"])
-                            self.peers.update(new_peers - {self.address})
-                            self.logger.info(f"Peers descobertos: {len(new_peers)}")
+                            new_peers = set(response.payload["peers"]) - {self.address}
+                            discovered_peers = new_peers - self.peers
+                            
+                            if discovered_peers:
+                                self.peers.update(discovered_peers)
+                                self.logger.info(f"Peers descobertos: {len(discovered_peers)}")
+                                
+                                # Avisa os novos peers sobre a nossa existência enviando um PING
+                                for new_peer in discovered_peers:
+                                    try:
+                                        self._send_message(new_peer, Protocol.ping())
+                                    except Exception as e:
+                                        self.logger.debug(f"Não foi possível notificar o novo peer {new_peer}: {e}")
                     except Exception as e:
                         self.logger.warning(f"Falha ao descobrir peers de {peer_address}: {e}")
                         
