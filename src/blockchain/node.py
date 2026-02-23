@@ -50,7 +50,8 @@ class Node:
         """Inicia o servidor do nó."""
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.server_socket.bind((self.host, self.port))
+        # Bind em 0.0.0.0 para aceitar conexões de qualquer interface (útil para WSL/Docker)
+        self.server_socket.bind(("0.0.0.0", self.port))
         self.server_socket.listen(10)
         
         self.running = True
@@ -144,6 +145,10 @@ class Node:
             case MessageType.REQUEST_CHAIN:
                 return Protocol.response_chain(self.blockchain.to_dict())
             
+            case MessageType.REQUEST_MEMPOOL:
+                txs = [tx.to_dict() for tx in self.blockchain.pending_transactions]
+                return Protocol.response_mempool(txs)
+            
             case MessageType.RESPONSE_CHAIN:
                 chain_data = message.payload["blockchain"]
                 new_chain = [Block.from_dict(b) for b in chain_data["chain"]]
@@ -218,6 +223,22 @@ class Node:
                         break
             except Exception as e:
                 self.logger.error(f"Erro ao sincronizar com {peer}: {e}")
+
+    def sync_mempool(self):
+        """Sincroniza transações pendentes com os peers."""
+        added = 0
+        for peer in list(self.peers):
+            try:
+                response = self._send_message(peer, Protocol.request_mempool())
+                if response and response.type == MessageType.RESPONSE_MEMPOOL:
+                    for tx_data in response.payload["transactions"]:
+                        tx = Transaction.from_dict(tx_data)
+                        if self.blockchain.add_transaction(tx):
+                            added += 1
+            except Exception as e:
+                self.logger.error(f"Erro ao sincronizar mempool com {peer}: {e}")
+        self.logger.info(f"Mempool sincronizada: {added} nova(s) transação(ões) adicionada(s)")
+        return added
     
     def broadcast_transaction(self, transaction: Transaction):
         """Propaga uma transação para todos os peers."""

@@ -25,6 +25,8 @@ class MessageType(Enum):
     NEW_BLOCK = "NEW_BLOCK"
     REQUEST_CHAIN = "REQUEST_CHAIN"
     RESPONSE_CHAIN = "RESPONSE_CHAIN"
+    REQUEST_MEMPOOL = "REQUEST_MEMPOOL"
+    RESPONSE_MEMPOOL = "RESPONSE_MEMPOOL"
     PING = "PING"
     PONG = "PONG"
     DISCOVER_PEERS = "DISCOVER_PEERS"
@@ -107,6 +109,22 @@ class Protocol:
             payload={"blockchain": blockchain_dict},
         )
     
+    @staticmethod
+    def request_mempool() -> Message:
+        """Cria mensagem de solicitação da mempool."""
+        return Message(
+            type=MessageType.REQUEST_MEMPOOL,
+            payload={},
+        )
+
+    @staticmethod
+    def response_mempool(transactions: list[dict]) -> Message:
+        """Cria mensagem de resposta com a mempool."""
+        return Message(
+            type=MessageType.RESPONSE_MEMPOOL,
+            payload={"transactions": transactions},
+        )
+
     @staticmethod
     def ping() -> Message:
         """Cria mensagem de ping."""

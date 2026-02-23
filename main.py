@@ -223,10 +223,16 @@ def sync_chain(node: Node):
         TextColumn("[progress.description]{task.description}"),
         transient=True,
     ) as progress:
-        progress.add_task(description="Sincronizando blockchain...", total=None)
+        progress.add_task(description="Sincronizando blockchain e mempool...", total=None)
         node.sync_blockchain()
+        added = node.sync_mempool()
         
-    console.print(f"[bold green]✓ Blockchain sincronizada com {len(node.blockchain.chain)} blocos[/bold green]")
+    console.print(
+        f"[bold green]✓ Blockchain sincronizada com {len(node.blockchain.chain)} blocos[/bold green]\n"
+        f"[bold green]✓ Mempool sincronizada: {len(node.blockchain.pending_transactions)} transação(ões) pendente(s)"
+        + (f" ([cyan]+{added} nova(s)[/cyan])" if added else "") +
+        "[/bold green]"
+    )
 
 
 def main():
