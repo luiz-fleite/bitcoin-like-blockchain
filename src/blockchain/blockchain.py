@@ -46,34 +46,34 @@ class Blockchain:
                 if tx.origem == address:
                     balance -= tx.valor
         
-        # Considera também transações pendentes
+        # Considera também transações pendentes apenas para subtrair o saldo
+        # (o dinheiro já saiu da conta, mas ainda não chegou no destino)
         for tx in self.pending_transactions:
-            if tx.destino == address:
-                balance += tx.valor
             if tx.origem == address:
                 balance -= tx.valor
         
         return balance
     
-    def add_transaction(self, transaction: Transaction) -> bool:
+    def add_transaction(self, transaction: Transaction, trusted: bool = False) -> bool:
         """
         Adiciona uma transação ao pool de pendentes.
         
         Valida:
         - Valor positivo
-        - Saldo suficiente na origem
+        - Saldo suficiente na origem (pulado se trusted=True, ex: sync de peers)
         - Transação não duplicada
         """
-        # Verifica duplicata
+        # Verifica duplicata na mempool
         if transaction in self.pending_transactions:
             return False
         
+        # Verifica se já está confirmada em algum bloco
         for block in self.chain:
             if transaction in block.transactions:
                 return False
         
-        # Verifica saldo (exceto para origem "genesis" ou "coinbase")
-        if transaction.origem not in ("genesis", "coinbase"):
+        # Verifica saldo (exceto para origem "genesis", "coinbase", ou sync de peer)
+        if not trusted and transaction.origem not in ("genesis", "coinbase"):
             balance = self.get_balance(transaction.origem)
             if balance < transaction.valor:
                 return False

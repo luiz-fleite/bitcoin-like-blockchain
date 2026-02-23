@@ -41,15 +41,19 @@ class Miner:
         if transactions is None:
             transactions = self.blockchain.pending_transactions.copy()
         
+        self.mining = True
+        
+        # Timestamp compartilhado entre o bloco e a coinbase
+        block_timestamp = time.time()
+        
         # Adiciona transação de recompensa (Coinbase)
         reward_tx = Transaction(
             origem="coinbase",
             destino=self.miner_address,
-            valor=50.0  # Recompensa fixa
+            valor=50.0,  # Recompensa fixa
+            timestamp=block_timestamp,
         )
         transactions.insert(0, reward_tx)
-        
-        self.mining = True
         
         # Cria bloco candidato
         block = Block(
@@ -57,7 +61,7 @@ class Miner:
             previous_hash=self.blockchain.last_block.hash,
             transactions=transactions,
             nonce=0,
-            timestamp=time.time(),
+            timestamp=block_timestamp,
         )
         
         # Proof of Work: encontra nonce válido

@@ -110,7 +110,7 @@ hash_hex = hashlib.sha256(
   "transactions": [],
   "nonce": 0,
   "timestamp": 0,
-  "hash": "816534932c2b7154836da6afc367695e6337db8a921823784c14378abed4f7d7"
+  "hash": "0567c32b97c36a70d3f4cb865710d329a0be5d713c8cb1b8c769fbaf89f1afb7"
 }
 ```
 
@@ -119,7 +119,7 @@ hash_hex = hashlib.sha256(
 python3 -c "import hashlib, json; g = {'index': 0, 'previous_hash': '0'*64, 'transactions': [], 'nonce': 0, 'timestamp': 0}; print(hashlib.sha256(json.dumps(g, sort_keys=True).encode()).hexdigest())"
 ```
 
-Resultado esperado: `816534932c2b7154836da6afc367695e6337db8a921823784c14378abed4f7d7`
+Resultado esperado: `0567c32b97c36a70d3f4cb865710d329a0be5d713c8cb1b8c769fbaf89f1afb7`
 
 ---
 
@@ -143,7 +143,7 @@ Primeira transação do bloco minerado:
 
 Antes de conectar com outras equipes:
 
-- [ ] Hash do gênesis: `816534932c2b7154836da6afc367695e6337db8a921823784c14378abed4f7d7`
+- [ ] Hash do gênesis: `0567c32b97c36a70d3f4cb865710d329a0be5d713c8cb1b8c769fbaf89f1afb7`
 - [ ] Hash SHA-256 com `sort_keys=True`
 - [ ] Mensagens: `{"type": "...", "payload": {...}, "sender": "..."}`
 - [ ] Transmissão: `[4 bytes tamanho big-endian][JSON UTF-8]`

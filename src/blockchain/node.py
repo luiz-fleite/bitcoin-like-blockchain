@@ -14,12 +14,6 @@ from .miner import Miner
 from .protocol import Protocol, Message, MessageType
 
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-
-
 class Node:
     """
     Representa um nó na rede P2P da blockchain.
@@ -56,7 +50,8 @@ class Node:
         """Inicia o servidor do nó."""
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.server_socket.bind((self.host, self.port))
+        # Bind em 0.0.0.0 para aceitar conexões de qualquer interface (útil para WSL/Docker)
+        self.server_socket.bind(("0.0.0.0", self.port))
         self.server_socket.listen(10)
         
         self.running = True
@@ -150,25 +145,43 @@ class Node:
             case MessageType.REQUEST_CHAIN:
                 return Protocol.response_chain(self.blockchain.to_dict())
             
+            case MessageType.REQUEST_MEMPOOL:
+                txs = [tx.to_dict() for tx in self.blockchain.pending_transactions]
+                return Protocol.response_mempool(txs)
+            
             case MessageType.RESPONSE_CHAIN:
                 chain_data = message.payload["blockchain"]
                 new_chain = [Block.from_dict(b) for b in chain_data["chain"]]
                 if self.blockchain.replace_chain(new_chain):
                     self.logger.info(f"Blockchain atualizada: {len(new_chain)} blocos")
             
-            case MessageType.PING:
-                # Registra o peer que enviou o ping
-                if message.sender and message.sender != self.address:
-                    self.peers.add(message.sender)
-                    self.logger.info(f"Peer registrado via PING: {message.sender}")
-                return Protocol.pong()
-            
-            case MessageType.DISCOVER_PEERS:
-                return Protocol.peers_list(list(self.peers))
-            
-            case MessageType.PEERS_LIST:
-                new_peers = set(message.payload["peers"])
-                self.peers.update(new_peers - {self.address})
+            case _:
+                # Tenta processar mensagens não obrigatórias (PING, DISCOVER_PEERS, etc)
+                # Se a outra equipe não suportar, eles simplesmente vão ignorar ou dar erro,
+                # mas não quebra o fluxo principal.
+                try:
+                    if message.type == MessageType.PING:
+                        if message.sender and message.sender != self.address:
+                            self.peers.add(message.sender)
+                            self.logger.info(f"Peer registrado via PING: {message.sender}")
+                        return Protocol.pong()
+                    
+                    elif message.type == MessageType.DISCOVER_PEERS:
+                        return Protocol.peers_list(list(self.peers))
+                    
+                    elif message.type == MessageType.PEERS_LIST:
+                        new_peers = set(message.payload["peers"]) - {self.address}
+                        discovered_peers = new_peers - self.peers
+                        if discovered_peers:
+                            self.peers.update(discovered_peers)
+                            self.logger.info(f"Peers descobertos via broadcast: {len(discovered_peers)}")
+                            for new_peer in discovered_peers:
+                                try:
+                                    self._send_message(new_peer, Protocol.ping())
+                                except Exception:
+                                    pass
+                except Exception as e:
+                    self.logger.debug(f"Mensagem não padrão ignorada ou falhou: {e}")
         
         return None
     
@@ -198,11 +211,24 @@ class Node:
                         peers_msg = Protocol.discover_peers()
                         response = self._send_message(peer_address, peers_msg)
                         if response and response.type == MessageType.PEERS_LIST:
-                            new_peers = set(response.payload["peers"])
-                            self.peers.update(new_peers - {self.address})
-                            self.logger.info(f"Peers descobertos: {len(new_peers)}")
+                            new_peers = set(response.payload["peers"]) - {self.address}
+                            discovered_peers = new_peers - self.peers
+                            
+                            if discovered_peers:
+                                self.peers.update(discovered_peers)
+                                self.logger.info(f"Peers descobertos: {len(discovered_peers)}")
+                                
+                                # Avisa os novos peers sobre a nossa existência enviando um PING
+                                for new_peer in discovered_peers:
+                                    try:
+                                        self._send_message(new_peer, Protocol.ping())
+                                    except Exception as e:
+                                        self.logger.debug(f"Não foi possível notificar o novo peer {new_peer}: {e}")
                     except Exception as e:
                         self.logger.warning(f"Falha ao descobrir peers de {peer_address}: {e}")
+                        
+                    # Faz broadcast da própria existência para todos os peers conhecidos
+                    self._broadcast(Protocol.ping())
                         
                     return True
         
@@ -224,6 +250,28 @@ class Node:
                         break
             except Exception as e:
                 self.logger.error(f"Erro ao sincronizar com {peer}: {e}")
+
+    def sync_mempool(self) -> dict:
+        """Sincroniza transações pendentes com os peers."""
+        added = 0
+        unreachable = []
+        for peer in list(self.peers):
+            try:
+                response = self._send_message(peer, Protocol.request_mempool())
+                if response and response.type == MessageType.RESPONSE_MEMPOOL:
+                    for tx_data in response.payload["transactions"]:
+                        tx = Transaction.from_dict(tx_data)
+                        # trusted=True: confia que o peer já validou o saldo
+                        if self.blockchain.add_transaction(tx, trusted=True):
+                            added += 1
+                else:
+                    unreachable.append(peer)
+            except Exception as e:
+                self.logger.error(f"Erro ao sincronizar mempool com {peer}: {e}")
+                unreachable.append(peer)
+        self.logger.info(f"Mempool sincronizada: {added} nova(s) transação(ões) adicionada(s)")
+        return {"added": added, "unreachable": unreachable}
+        return added
     
     def broadcast_transaction(self, transaction: Transaction):
         """Propaga uma transação para todos os peers."""
