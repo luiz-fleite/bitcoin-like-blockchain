@@ -14,12 +14,6 @@ from .miner import Miner
 from .protocol import Protocol, Message, MessageType
 
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-
-
 class Node:
     """
     Representa um nó na rede P2P da blockchain.
