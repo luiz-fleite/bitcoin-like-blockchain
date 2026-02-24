@@ -254,20 +254,43 @@ def main():
         ]
     )
     
-    banner = Text(
-        "  ____  _ _            _          ____ _           _       \n"
-        " | __ )(_) |_ ___ ___ (_)_ __    / ___| |__   __ _(_)_ __  \n"
-        " |  _ \\| | __/ __/ _ \\| | '_ \\  | |   | '_ \\ / _` | | '_ \\ \n"
-        " | |_) | | || (_| (_) | | | | | | |___| | | | (_| | | | | |\n"
-        " |____/|_|\\__\\___\\___/|_|_| |_|  \\____|_| |_|\\__,_|_|_| |_|\n"
-    )
-    banner.stylize("bold yellow")
+    _banner_lines = [
+        "██████╗ ██╗████████╗ ██████╗ ██████╗ ██╗███╗   ██╗",
+        "██╔══██╗██║╚══██╔══╝██╔════╝██╔═══██╗██║████╗  ██║",
+        "██████╔╝██║   ██║   ██║     ██║   ██║██║██╔██╗ ██║",
+        "██╔══██╗██║   ██║   ██║     ██║   ██║██║██║╚██╗██║",
+        "██████╔╝██║   ██║   ╚██████╗╚██████╔╝██║██║ ╚████║",
+        "╚═════╝ ╚═╝   ╚═╝    ╚═════╝ ╚═════╝ ╚═╝╚═╝  ╚═══╝",
+        "",
+        " ██████╗██╗  ██╗ █████╗ ██╗███╗   ██╗             ",
+        "██╔════╝██║  ██║██╔══██╗██║████╗  ██║             ",
+        "██║     ███████║███████║██║██╔██╗ ██║             ",
+        "██║     ██╔══██║██╔══██║██║██║╚██╗██║             ",
+        "╚██████╗██║  ██║██║  ██║██║██║ ╚████║             ",
+        " ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝            ",
+    ]
+    # Gradient laranja → dourado (tema Bitcoin)
+    _colors = [
+        (255, 140, 0), (255, 150, 0), (255, 165, 0),
+        (255, 180, 0), (255, 190, 0), (255, 200, 0),
+        (255, 210, 0), (255, 215, 0), (255, 215, 0),
+        (255, 200, 0), (255, 185, 0), (255, 170, 0),
+        (255, 155, 0),
+    ]
+    banner = Text()
+    for i, line in enumerate(_banner_lines):
+        r, g, b = _colors[min(i, len(_colors) - 1)]
+        banner.append(line + "\n", style=f"bold rgb({r},{g},{b})")
+    console.print()
+    #console.print(banner, justify="center")
     console.print(banner)
     console.print(Panel.fit(
-        f"[bold cyan]Node[/bold cyan] {args.host}:{args.port}\n"
-        f"[dim]Logs → {log_file}[/dim]",
-        border_style="cyan"
+        f"[bold rgb(255,165,0)]◈  Node[/bold rgb(255,165,0)]  [bold white]{args.host}:{args.port}[/bold white]\n"
+        f"[dim]logs → {log_file}[/dim]",
+        border_style="rgb(255,165,0)",
+        padding=(0, 2),
     ))
+    console.print()
     
     # Cria e inicia o nó
     node = Node(host=args.host, port=args.port)
