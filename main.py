@@ -36,8 +36,8 @@ def parse_args():
     parser.add_argument(
         "--port",
         type=int,
-        default=5000,
-        help="Porta do nó (default: 5000)"
+        default=5555,
+        help="Porta do nó (default: 5555)"
     )
     parser.add_argument(
         "--bootstrap",
