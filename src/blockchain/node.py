@@ -172,6 +172,12 @@ class Node:
                             self.logger.error(f"Erro ao sincronizar com {message.sender}: {e}")
             
             case MessageType.REQUEST_CHAIN:
+                # Registra o remetente como peer (conexão bidirecional).
+                # Quem pede a chain quer participar da rede.
+                if message.sender and message.sender != self.address:
+                    if message.sender not in self.peers:
+                        self.peers.add(message.sender)
+                        self.logger.info(f"Peer registrado via REQUEST_CHAIN: {message.sender}")
                 return Protocol.response_chain(self.blockchain.to_dict())
             
             case MessageType.REQUEST_MEMPOOL:
