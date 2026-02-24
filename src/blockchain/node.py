@@ -141,6 +141,35 @@ class Node:
                     self._broadcast(message, exclude=message.sender)
                     if self.on_new_block:
                         self.on_new_block(block)
+                else:
+                    # Bloco rejeitado: pode estar em fork ou atrás da chain.
+                    # Solicita a chain completa do remetente para resolver.
+                    self.logger.warning(
+                        f"Bloco #{block.index} de {message.sender} rejeitado "
+                        f"(nossa chain tem {len(self.blockchain.chain)} blocos). "
+                        f"Solicitando chain completa para sync..."
+                    )
+                    if message.sender:
+                        try:
+                            response = self._send_message(message.sender, Protocol.request_chain())
+                            if response and response.type == MessageType.RESPONSE_CHAIN:
+                                chain_data = response.payload["blockchain"]
+                                new_chain = [Block.from_dict(b) for b in chain_data["chain"]]
+                                if self.blockchain.replace_chain(new_chain):
+                                    self.logger.info(
+                                        f"Chain sincronizada de {message.sender}: "
+                                        f"{len(new_chain)} blocos"
+                                    )
+                                    self.miner.stop_mining()
+                                    # Adiciona o remetente como peer se ainda não estava
+                                    self.peers.add(message.sender)
+                                else:
+                                    self.logger.warning(
+                                        f"Chain de {message.sender} também rejeitada "
+                                        f"(mais curta ou inválida)"
+                                    )
+                        except Exception as e:
+                            self.logger.error(f"Erro ao sincronizar com {message.sender}: {e}")
             
             case MessageType.REQUEST_CHAIN:
                 return Protocol.response_chain(self.blockchain.to_dict())
@@ -154,6 +183,12 @@ class Node:
                 new_chain = [Block.from_dict(b) for b in chain_data["chain"]]
                 if self.blockchain.replace_chain(new_chain):
                     self.logger.info(f"Blockchain atualizada: {len(new_chain)} blocos")
+                # Registra o remetente como peer se ainda não estava.
+                # Necessário para nós que respondem em nova conexão (estilo callback).
+                if message.sender and message.sender != self.address:
+                    if message.sender not in self.peers:
+                        self.peers.add(message.sender)
+                        self.logger.info(f"Peer auto-descoberto via RESPONSE_CHAIN: {message.sender}")
             
             case _:
                 # Tenta processar mensagens não obrigatórias (PING, DISCOVER_PEERS, etc)
@@ -186,51 +221,94 @@ class Node:
         return None
     
     def connect_to_peer(self, peer_address: str) -> bool:
-        """Conecta a um peer e adiciona à lista."""
+        """Conecta a um peer e adiciona à lista.
+
+        Usa REQUEST_CHAIN como handshake (mensagem obrigatória pelo padrão).
+        
+        Suporta dois estilos de resposta:
+        - Mesmo socket (nosso estilo): RESPONSE_CHAIN volta na mesma conexão TCP.
+        - Conexão nova (estilo callback): o peer abre nova conexão de volta para
+          enviar o RESPONSE_CHAIN. Nesse caso o handler do servidor processa a
+          chain e este método adiciona o peer mesmo sem resposta na mesma socket.
+        """
         if peer_address == self.address:
             return False
         
         try:
             host, port = peer_address.split(":")
+            
+            # Testa alcançabilidade, envia REQUEST_CHAIN e tenta capturar
+            # RESPONSE_CHAIN na mesma socket (nosso estilo).
+            connected = False
+            response = None
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                sock.connect((host, int(port)))
+                sock.settimeout(10)
+                sock.connect((host, int(port)))  # lança exceção se inacessível
+                connected = True
                 
-                # Envia ping para verificar conexão
-                message = Protocol.ping()
-                message.sender = self.address
-                sock.sendall(message.to_bytes())
+                msg = Protocol.request_chain()
+                msg.sender = self.address
+                sock.sendall(msg.to_bytes())
                 
-                # Aguarda pong
-                length_data = sock.recv(4)
-                if length_data:
-                    self.peers.add(peer_address)
-                    self.logger.info(f"Conectado ao peer: {peer_address}")
-                    
-                    # Solicita lista de peers conhecidos por ele
-                    try:
-                        peers_msg = Protocol.discover_peers()
-                        response = self._send_message(peer_address, peers_msg)
-                        if response and response.type == MessageType.PEERS_LIST:
-                            new_peers = set(response.payload["peers"]) - {self.address}
-                            discovered_peers = new_peers - self.peers
-                            
-                            if discovered_peers:
-                                self.peers.update(discovered_peers)
-                                self.logger.info(f"Peers descobertos: {len(discovered_peers)}")
-                                
-                                # Avisa os novos peers sobre a nossa existência enviando um PING
-                                for new_peer in discovered_peers:
-                                    try:
-                                        self._send_message(new_peer, Protocol.ping())
-                                    except Exception as e:
-                                        self.logger.debug(f"Não foi possível notificar o novo peer {new_peer}: {e}")
-                    except Exception as e:
-                        self.logger.warning(f"Falha ao descobrir peers de {peer_address}: {e}")
-                        
-                    # Faz broadcast da própria existência para todos os peers conhecidos
-                    self._broadcast(Protocol.ping())
-                        
-                    return True
+                try:
+                    length_data = sock.recv(4)
+                    if length_data:
+                        length = int.from_bytes(length_data, 'big')
+                        data = b""
+                        while len(data) < length:
+                            chunk = sock.recv(min(self.BUFFER_SIZE, length - len(data)))
+                            if not chunk:
+                                break
+                            data += chunk
+                        if data:
+                            response = Message.from_bytes(data)
+                except Exception:
+                    # Sem resposta na mesma socket: peer usa estilo callback
+                    # (abre nova conexão de volta). O servidor vai receber o
+                    # RESPONSE_CHAIN e aplicar a chain automaticamente.
+                    pass
+            
+            if not connected:
+                return False
+            
+            # Adiciona peer independentemente do estilo de resposta:
+            # - Mesmo socket: processa agora.
+            # - Callback: RESPONSE_CHAIN chega pelo servidor em instantes,
+            #   e o handler já adiciona o peer também (dupla garantia).
+            self.peers.add(peer_address)
+            self.logger.info(f"Conectado ao peer: {peer_address}")
+            
+            if response and response.type == MessageType.RESPONSE_CHAIN:
+                chain_data = response.payload["blockchain"]
+                new_chain = [Block.from_dict(b) for b in chain_data["chain"]]
+                if self.blockchain.replace_chain(new_chain):
+                    self.logger.info(
+                        f"Blockchain atualizada no handshake: {len(new_chain)} blocos"
+                    )
+            else:
+                self.logger.info(
+                    f"Peer {peer_address} usa estilo callback; "
+                    f"aguardando RESPONSE_CHAIN inbound..."
+                )
+            
+            # Tenta descobrir peers adicionais (opcional, não-obrigatório)
+            try:
+                peers_response = self._send_message(peer_address, Protocol.discover_peers())
+                if peers_response and peers_response.type == MessageType.PEERS_LIST:
+                    new_peers = set(peers_response.payload["peers"]) - {self.address}
+                    discovered_peers = new_peers - self.peers
+                    if discovered_peers:
+                        self.peers.update(discovered_peers)
+                        self.logger.info(f"Peers descobertos: {len(discovered_peers)}")
+                        for new_peer in discovered_peers:
+                            try:
+                                self._send_message(new_peer, Protocol.ping())
+                            except Exception as e:
+                                self.logger.debug(f"Não foi possível notificar {new_peer}: {e}")
+            except Exception as e:
+                self.logger.debug(f"DISCOVER_PEERS não suportado por {peer_address} (opcional): {e}")
+            
+            return True
         
         except Exception as e:
             self.logger.error(f"Erro ao conectar ao peer {peer_address}: {e}")
