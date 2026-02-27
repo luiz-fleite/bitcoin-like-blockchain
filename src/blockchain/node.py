@@ -41,6 +41,13 @@ class Node:
         self.running = False
         
         self.logger = logging.getLogger(f"Node:{port}")
+        log_file = f"node_{port}.log"
+        file_handler = logging.FileHandler(log_file)
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        file_handler.setFormatter(formatter)
+        self.logger.setLevel(logging.INFO)
+        if not self.logger.hasHandlers():
+            self.logger.addHandler(file_handler)
         
         # Callbacks para eventos
         self.on_new_block: Callable[[Block], None] | None = None
@@ -92,9 +99,7 @@ class Node:
             length_data = client_socket.recv(4)
             if not length_data:
                 return
-            
             length = int.from_bytes(length_data, 'big')
-            
             # Lê mensagem
             data = b""
             while len(data) < length:
@@ -102,14 +107,17 @@ class Node:
                 if not chunk:
                     break
                 data += chunk
-            
+            # Loga o conteúdo bruto recebido
+            self.logger.info(f"Dados recebidos de {address}: {data}")
             if data:
-                message = Message.from_bytes(data)
+                try:
+                    message = Message.from_bytes(data)
+                except Exception as e:
+                    self.logger.error(f"Erro ao decodificar mensagem de {address}: {e}. Dados: {data}")
+                    return
                 response = self._process_message(message)
-                
                 if response:
                     client_socket.sendall(response.to_bytes())
-        
         except Exception as e:
             self.logger.error(f"Erro ao processar cliente {address}: {e}")
         finally:
@@ -118,6 +126,7 @@ class Node:
     def _process_message(self, message: Message) -> Message | None:
         """Processa uma mensagem recebida e retorna resposta se necessário."""
         self.logger.info(f"Mensagem recebida: {message.type.value} de {message.sender}")
+        self.logger.info(f"Conteúdo completo da mensagem: {message.__dict__}")
         
         match message.type:
             case MessageType.NEW_TRANSACTION:
